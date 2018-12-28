@@ -21,14 +21,13 @@ import (
 	"github.com/go-kit/kit/log/level"
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
-	"warezbot/warez"
+
+	"github.com/mmandolesi-g/warezbot/warez"
 )
 
 const (
 	slackProcessPath = "/verify"
 	slackInteractive = "/slack/actions"
-
-	// BREAK
 
 	DefaultHTTPIdleTimeout       = 30 * time.Second // The timeout before unused open connections are close
 	DefaultHTTPReadHeaderTimeout = 5 * time.Second  // The max time to read the request header
@@ -67,27 +66,27 @@ type HTTPSDaemon struct {
 func (dm *WarezDaemon) setupHTTP(svc warez.Service) http.Handler {
 	router := mux.NewRouter()
 
-	var processSlack endpoint.Endpoint
+	var slackEventEndpoint endpoint.Endpoint
 	{
-		processSlack = slackProcessEndpoint(svc.ProcessSlackEvents)
+		slackEventEndpoint = slackProcessEndpoint(svc.ProcessSlackEvents)
 	}
-	var processSlackHandler http.Handler
+	var slackEventHandler http.Handler
 	{
-		processSlackHandler = httptransport.NewServer(
-			processSlack,
+		slackEventHandler = httptransport.NewServer(
+			slackEventEndpoint,
 			dm.decodeSlackEvent,
 			dm.encodeWarezResponse)
 	}
-	router.Methods("POST").Path(slackProcessPath).Handler(processSlackHandler)
+	router.Methods("POST").Path(slackProcessPath).Handler(slackEventHandler)
 
-	var slackAction endpoint.Endpoint
+	var slackActionEndpoint endpoint.Endpoint
 	{
-		slackAction = slackProcessActionEndpoint(svc.ProcessSlackActions)
+		slackActionEndpoint = slackProcessActionEndpoint(svc.ProcessSlackActions)
 	}
 	var slackActionHandler http.Handler
 	{
 		slackActionHandler = httptransport.NewServer(
-			slackAction,
+			slackActionEndpoint,
 			dm.decodeSlackAction,
 			dm.encodeWarezNilResponse)
 	}
@@ -138,7 +137,15 @@ func (dm *WarezDaemon) decodeSlackEvent(ctx context.Context, r *http.Request) (i
 }
 
 func (dm *WarezDaemon) encodeWarezNilResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
-	w.WriteHeader(http.StatusOK)
+	resp, ok := response.(warez.Response)
+	if !ok {
+		return errors.New("endpoint response error")
+	}
+	if resp.StatusCode != http.StatusAccepted {
+		w.WriteHeader(resp.StatusCode)
+		return errors.New("something went wrong")
+	}
+	w.WriteHeader(resp.StatusCode)
 	return nil
 }
 

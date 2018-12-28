@@ -2,13 +2,14 @@ package daemon
 
 import (
 	"fmt"
-	"warezbot/emby"
-	"warezbot/radarr"
-	"warezbot/slack"
-	"warezbot/warez"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+
+	"github.com/mmandolesi-g/warezbot/emby"
+	"github.com/mmandolesi-g/warezbot/radarr"
+	"github.com/mmandolesi-g/warezbot/slack"
+	"github.com/mmandolesi-g/warezbot/warez"
 )
 
 type WarezDaemon struct {

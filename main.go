@@ -2,8 +2,8 @@ package main
 
 import (
 	"flag"
+	"github.com/mmandolesi-g/warezbot/daemon"
 	"os"
-	"warezbot/daemon"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"

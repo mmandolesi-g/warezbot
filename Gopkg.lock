@@ -55,7 +55,7 @@
   revision = "b84e30acd515aadc4b783ad4ff83aff3299bdfe0"
 
 [[projects]]
-  digest = "1:95d38d218bf2290987c6b0e885a9f0f2d3d3239235acaddca01c3fe36e5e5566"
+  digest = "1:60f73a5ecf905d2a16865070a13053e913ef249aa0f044b24763d542f3fad455"
   name = "github.com/nlopes/slack"
   packages = [
     ".",
@@ -82,6 +82,7 @@
     "github.com/go-kit/kit/transport/http",
     "github.com/gorilla/mux",
     "github.com/nlopes/slack",
+    "github.com/pkg/errors",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1

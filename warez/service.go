@@ -6,9 +6,16 @@ import (
 	"net/http"
 	"strings"
 
-	"warezbot/emby"
-	"warezbot/radarr"
-	"warezbot/slack"
+	"github.com/mmandolesi-g/warezbot/emby"
+	"github.com/mmandolesi-g/warezbot/radarr"
+	"github.com/mmandolesi-g/warezbot/slack"
+)
+
+const (
+	addMovie   = "add movie"
+	nowPlaying = "now playing"
+	ping       = "ping"
+	search     = "search"
 )
 
 type SlackEvent struct {
@@ -149,34 +156,46 @@ func NewService(embyClient *emby.Client, radarrClient *radarr.Client, slackClien
 func (s *service) ProcessSlackEvents(ctx context.Context, request SlackEvent) (Response, error) {
 	fmt.Printf("%+v\n", request)
 	if request.Event.Type == "app_mention" {
-		if strings.Contains(request.Event.Text, "ping") {
+		if strings.Contains(request.Event.Text, ping) {
 			s.slack.Ping()
 		}
-		if strings.Contains(request.Event.Text, "now playing") {
+		if strings.Contains(request.Event.Text, nowPlaying) {
 			sessions, err := s.emby.Sessions(ctx)
 			if err != nil {
 				fmt.Print(err)
 			}
 			s.slack.NowPlaying(sessions)
 		}
-		if strings.Contains(request.Event.Text, "add movie") {
-			text := strings.Split(request.Event.Text, " ")
-			if len(text) >= 4 {
-				movies, err := s.radarr.Search(ctx, text[3:])
-				if err != nil {
-					fmt.Print(err)
+		if strings.Contains(request.Event.Text, addMovie) {
+			go func() {
+				text := strings.Split(request.Event.Text, " ")
+				if len(text) >= 4 {
+					movies, err := s.radarr.Search(ctx, text[3:])
+					if err != nil {
+						fmt.Print(err)
+					}
+					s.slack.PostSearch(ctx, movies)
 				}
-
-				s.slack.PostSearch(ctx, movies)
-			}
+			}()
+		}
+		if strings.Contains(request.Event.Text, search) {
+			go func() {
+				text := strings.Split(request.Event.Text, " ")
+				if len(text) >= 3 {
+					sResults, err := s.emby.Search(ctx, text[2:])
+					if err != nil {
+						fmt.Print(err)
+					}
+					s.slack.PostEmbySearch(ctx, sResults)
+				}
+			}()
 		}
 	}
 
-	resp := Response{
+	return Response{
 		EventType:  request.Event.Type,
 		StatusCode: http.StatusOK,
-	}
-	return resp, nil
+	}, nil
 }
 
 func (s *service) ProcessSlackActions(ctx context.Context, request SlackAction) (Response, error) {
@@ -184,11 +203,14 @@ func (s *service) ProcessSlackActions(ctx context.Context, request SlackAction) 
 
 	if request.Type == "interactive_message" {
 		if request.CallbackID == "movieDownloadPrompt" {
-			s.slack.MsgUpdate(ctx, request.OriginalMessage.Ts, request.User.Name, request.Actions[0].Name)
+			go func() {
+				s.slack.MsgUpdate(ctx, request.OriginalMessage.Ts, request.User.Name, request.Actions[0].Value)
+				s.radarr.Download(ctx, request.Actions[0].Name)
+			}()
 		}
 	}
-	// resp := Response{
-	// 	StatusCode: http.StatusOK,
-	// }
-	return Response{}, nil
+
+	return Response{
+		StatusCode: http.StatusAccepted,
+	}, nil
 }
