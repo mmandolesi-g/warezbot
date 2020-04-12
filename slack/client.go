@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nlopes/slack"
+
 	"warezbot/emby"
 	"warezbot/radarr"
 )
@@ -37,27 +38,71 @@ func NewClient(token string, channel string, botID string) (*Client, error) {
 	}, nil
 }
 
-func (s *Client) MsgUpdate(ctx context.Context, ts string, name string, title string) {
-	t := fmt.Sprintf("%s has downloaded %s", name, title)
-	_, _, _, err := s.UpdateMessage(ts, slack.MsgOptionText(t, false))
-	if err != nil {
-		fmt.Print(err)
+func (s *Client) MsgUpdate(ctx context.Context, ts string, name string, title string) error {
+	attachment := slack.Attachment{
+		Text:  fmt.Sprintf("Download process started by %s for %s", name, title),
+		Color: makeHexColor(),
+	}
+	s.UpdateMessage(ts, slack.MsgOptionAttachments(attachment))
+
+	return nil
+}
+
+func (s *Client) PostEmbySearch(ctx context.Context, results emby.SearchResults) {
+	var count int
+	for _, result := range results.SearchHints {
+		if result.Type == "Movie" || result.Type == "Episode" || result.Type == "Series" {
+			count++
+
+			var image string
+			if result.ItemImages.TotalRecordCount > 0 {
+				image = result.ItemImages.Images[0].URL
+			} else {
+				image = image404
+			}
+
+			attachment := slack.Attachment{
+				Color:      makeHexColor(),
+				CallbackID: "embySearchResult",
+				Footer:     result.ItemDetail.Overview,
+				ImageURL:   image,
+				Fields: []slack.AttachmentField{
+					{
+						Title: fmt.Sprintf("%s - %s", result.Name, result.Type),
+						Value: strconv.Itoa(result.ProductionYear),
+					},
+				},
+			}
+			s.PostMessage(slack.MsgOptionText("", false), slack.MsgOptionAttachments(attachment))
+		}
 	}
 
+	attachment := slack.Attachment{
+		Color:    makeHexColor(),
+		ImageURL: "",
+		Fields: []slack.AttachmentField{
+			{
+				Title: "Total Results found:",
+				Value: strconv.Itoa(count),
+			},
+		},
+	}
+	s.PostMessage(slack.MsgOptionText("", false), slack.MsgOptionAttachments(attachment))
 }
 
 func (s *Client) PostSearch(ctx context.Context, movies radarr.Movies) {
 	var attachmentActions []slack.AttachmentAction
+	// Only post the first 5 movies in the search
 	if len(movies) > 5 {
-		movies = movies[5:]
+		movies = movies[:5]
 	}
 	for i, movie := range movies {
 		i++
 		attachmentActions = append(attachmentActions, slack.AttachmentAction{
-			Name:  movie.Title,
+			Name:  strconv.Itoa(movie.TmdbID),
 			Type:  "button",
-			Text:  fmt.Sprintf("%d.) %s", i, movie.Title),
-			Value: fmt.Sprintf("%d.) %s", i, movie.Title),
+			Text:  fmt.Sprintf("%d.) %s - %d", i, movie.Title, movie.Year),
+			Value: fmt.Sprintf("%d.) %s - %d", i, movie.Title, movie.Year),
 			Confirm: &slack.ConfirmationField{
 				Text: fmt.Sprintf("Are you sure you want to download %s (%s)?", movie.Title, strconv.Itoa(movie.Year)),
 			},
@@ -75,7 +120,7 @@ func (s *Client) PostSearch(ctx context.Context, movies radarr.Movies) {
 				},
 			},
 		}
-		_, _, _ = s.PostMessage(slack.MsgOptionText("", false), slack.MsgOptionAttachments(attachment))
+		s.PostMessage(slack.MsgOptionText("", false), slack.MsgOptionAttachments(attachment))
 	}
 
 	attachment := slack.Attachment{
@@ -84,8 +129,7 @@ func (s *Client) PostSearch(ctx context.Context, movies radarr.Movies) {
 		CallbackID: "movieDownloadPrompt",
 		Actions:    attachmentActions,
 	}
-	_, _, _ = s.PostMessage(slack.MsgOptionText("", false), slack.MsgOptionAttachments(attachment))
-
+	s.PostMessage(slack.MsgOptionText("", false), slack.MsgOptionAttachments(attachment))
 }
 
 func (s *Client) NowPlaying(sessions emby.Sessions) {
@@ -134,7 +178,7 @@ func (s *Client) NowPlaying(sessions emby.Sessions) {
 					},
 				},
 			}
-			_, _, _ = s.PostMessage(slack.MsgOptionText("", false), slack.MsgOptionAttachments(attachment))
+			s.PostMessage(slack.MsgOptionText("", false), slack.MsgOptionAttachments(attachment))
 		}
 	}
 }
@@ -146,7 +190,10 @@ func (s *Client) Ping() {
 		AuthorName: "warezbot",
 		AuthorIcon: "https://i.imgur.com/s0F5TJA.jpg",
 	}
-	_, _, _ = s.PostMessage(slack.MsgOptionText("pong", false), slack.MsgOptionAttachments(attachment))
+	_, _, err := s.PostMessage(slack.MsgOptionText("pong", false), slack.MsgOptionAttachments(attachment))
+	if err != nil {
+		fmt.Printf("erroring posting slack message: %v", err)
+	}
 }
 
 func (s *Client) PostMessage(options ...slack.MsgOption) (string, string, error) {

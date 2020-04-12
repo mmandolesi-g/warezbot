@@ -17,4 +17,6 @@ vendor/*
 .idea/*
 .idea
 .vscode
-daemon/config.json
+secrets.json
+build_linux
+warezbot

@@ -2,13 +2,14 @@ package daemon
 
 import (
 	"fmt"
+
+	"github.com/go-kit/kit/log"
+	"github.com/go-kit/kit/log/level"
+
 	"warezbot/emby"
 	"warezbot/radarr"
 	"warezbot/slack"
 	"warezbot/warez"
-
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
 )
 
 type WarezDaemon struct {
@@ -38,7 +39,7 @@ func NewWarezDaemon(logger log.Logger, requestLogPath string, config string) (*W
 		return nil, err
 	}
 
-	svc, err := warez.NewService(embyClient, radarrClient, slackClient)
+	svc, err := warez.NewService(embyClient, radarrClient, slackClient, logger)
 	if err != nil {
 		return nil, err
 	}
