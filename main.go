@@ -2,8 +2,9 @@ package main
 
 import (
 	"flag"
-	"github.com/mmandolesi-g/warezbot/daemon"
 	"os"
+
+	"warezbot/daemon"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -12,7 +13,7 @@ import (
 var (
 	listenAddr     = flag.String("httpListen", ":3000", "Listen address for the http service")
 	requestLogPath = flag.String("requestLog", "/var/log/request.log", "Path to the request log file")
-	configFile     = flag.String("configFile", "./daemon/config.json", "Path to the config file")
+	configFile     = flag.String("configFile", "./secrets.json", "Path to the config file")
 )
 
 func main() {

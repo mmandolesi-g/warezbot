@@ -6,10 +6,10 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 
-	"github.com/mmandolesi-g/warezbot/emby"
-	"github.com/mmandolesi-g/warezbot/radarr"
-	"github.com/mmandolesi-g/warezbot/slack"
-	"github.com/mmandolesi-g/warezbot/warez"
+	"warezbot/emby"
+	"warezbot/radarr"
+	"warezbot/slack"
+	"warezbot/warez"
 )
 
 type WarezDaemon struct {
@@ -39,7 +39,7 @@ func NewWarezDaemon(logger log.Logger, requestLogPath string, config string) (*W
 		return nil, err
 	}
 
-	svc, err := warez.NewService(embyClient, radarrClient, slackClient)
+	svc, err := warez.NewService(embyClient, radarrClient, slackClient, logger)
 	if err != nil {
 		return nil, err
 	}

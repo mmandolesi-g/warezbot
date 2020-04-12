@@ -28,10 +28,11 @@ type config struct {
 func loadConfig(file string) (*config, error) {
 	var config config
 	configFile, err := os.Open(file)
-	defer configFile.Close()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %v", err)
 	}
+	defer configFile.Close()
+
 	jsonParser := json.NewDecoder(configFile)
 	if err := jsonParser.Decode(&config); err != nil {
 		return nil, fmt.Errorf("failed to decode configs: %v", err)

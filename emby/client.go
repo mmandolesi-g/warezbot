@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	httpTimeout = 10 * time.Second
+	httpTimeout = 20 * time.Second
 )
 
 type Sessions []struct {
@@ -216,7 +216,7 @@ type Sessions []struct {
 		IsVideoDirect                 bool     `json:"IsVideoDirect"`
 		IsAudioDirect                 bool     `json:"IsAudioDirect"`
 		Bitrate                       int      `json:"Bitrate"`
-		Framerate                     int      `json:"Framerate"`
+		Framerate                     float64  `json:"Framerate"`
 		CompletionPercentage          float64  `json:"CompletionPercentage"`
 		TranscodingPositionTicks      int64    `json:"TranscodingPositionTicks"`
 		TranscodingStartPositionTicks int      `json:"TranscodingStartPositionTicks"`
@@ -563,7 +563,7 @@ func (c *Client) do(ctx context.Context, method string, path string) ([]byte, er
 	}
 
 	req.Header.Set("X-MediaBrowser-Token", c.token)
-	req = req.WithContext(ctx)
+	//req = req.WithContext(ctx)
 	response, err := c.http.Do(req)
 	if err != nil {
 		return nil, err

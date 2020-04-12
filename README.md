@@ -4,8 +4,7 @@ Slackbot to interact with Emby, Radarr and Sonarr.
 
 ## Setup
 
-Add a config.json file and point the start up flag to it. For example:
-
+Point the `configFile` flag to a file containing your config information. For example:
 ```
 {
   "loglevel": "debug",
@@ -29,8 +28,6 @@ Add a config.json file and point the start up flag to it. For example:
     "apikey": "xxx"
   }
 }
-
-
 ```
 
 ## Authors

@@ -11,8 +11,8 @@ import (
 
 	"github.com/nlopes/slack"
 
-	"github.com/mmandolesi-g/warezbot/emby"
-	"github.com/mmandolesi-g/warezbot/radarr"
+	"warezbot/emby"
+	"warezbot/radarr"
 )
 
 var (
@@ -190,7 +190,10 @@ func (s *Client) Ping() {
 		AuthorName: "warezbot",
 		AuthorIcon: "https://i.imgur.com/s0F5TJA.jpg",
 	}
-	s.PostMessage(slack.MsgOptionText("pong", false), slack.MsgOptionAttachments(attachment))
+	_, _, err := s.PostMessage(slack.MsgOptionText("pong", false), slack.MsgOptionAttachments(attachment))
+	if err != nil {
+		fmt.Printf("erroring posting slack message: %v", err)
+	}
 }
 
 func (s *Client) PostMessage(options ...slack.MsgOption) (string, string, error) {

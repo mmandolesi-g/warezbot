@@ -1,0 +1,7 @@
+FROM centos:7
+
+COPY build_linux /
+COPY secrets.json secrets.json
+
+CMD ["/build_linux"]
+EXPOSE 3000

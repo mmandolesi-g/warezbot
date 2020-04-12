@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,12 +25,13 @@ import (
 	httptransport "github.com/go-kit/kit/transport/http"
 	"github.com/gorilla/mux"
 
-	"github.com/mmandolesi-g/warezbot/warez"
+	"warezbot/warez"
 )
 
 const (
-	slackProcessPath = "/verify"
+	slackProcessPath = "/slack/events"
 	slackInteractive = "/slack/actions"
+	embyEventPath    = "/emby/events"
 
 	DefaultHTTPIdleTimeout       = 30 * time.Second // The timeout before unused open connections are close
 	DefaultHTTPReadHeaderTimeout = 5 * time.Second  // The max time to read the request header
@@ -63,7 +67,7 @@ type HTTPSDaemon struct {
 	writeTimeout      time.Duration
 }
 
-func (dm *WarezDaemon) setupHTTP(svc warez.Service) http.Handler {
+func (wd *WarezDaemon) setupHTTP(svc warez.Service) http.Handler {
 	router := mux.NewRouter()
 
 	var slackEventEndpoint endpoint.Endpoint
@@ -74,8 +78,8 @@ func (dm *WarezDaemon) setupHTTP(svc warez.Service) http.Handler {
 	{
 		slackEventHandler = httptransport.NewServer(
 			slackEventEndpoint,
-			dm.decodeSlackEvent,
-			dm.encodeWarezResponse)
+			wd.decodeSlackEvent,
+			wd.encodeWarezResponse)
 	}
 	router.Methods("POST").Path(slackProcessPath).Handler(slackEventHandler)
 
@@ -87,56 +91,117 @@ func (dm *WarezDaemon) setupHTTP(svc warez.Service) http.Handler {
 	{
 		slackActionHandler = httptransport.NewServer(
 			slackActionEndpoint,
-			dm.decodeSlackAction,
-			dm.encodeWarezNilResponse)
+			wd.decodeSlackAction,
+			wd.encodeWarezNilResponse)
 	}
 	router.Methods("POST").Path(slackInteractive).Handler(slackActionHandler)
+
+	var embyEventEndpoint endpoint.Endpoint
+	{
+		embyEventEndpoint = embyProcessEndpoint(svc.ProcessEmbyEvents)
+	}
+	var embyEventHandler http.Handler
+	{
+		embyEventHandler = httptransport.NewServer(
+			embyEventEndpoint,
+			wd.decodeEmbyEvent,
+			wd.encodeWarezResponse)
+	}
+	router.Methods("POST").Path(embyEventPath).Handler(embyEventHandler)
 
 	return router
 }
 
-func (dm *WarezDaemon) decodeSlackAction(ctx context.Context, r *http.Request) (interface{}, error) {
+func (wd *WarezDaemon) decodeSlackAction(ctx context.Context, r *http.Request) (interface{}, error) {
 	var s warez.SlackAction
-
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		fmt.Print(err)
 		return nil, fmt.Errorf("error reading request body: %v", err)
 	}
+	level.Debug(wd.logger).Log("endpoint", "decodeSlackAction", "body", string(body))
 
 	b, err := url.QueryUnescape(string(body))
 	if err != nil {
-		fmt.Print(err)
-		return nil, fmt.Errorf("error unescaping payload: %v", err)
+		e := fmt.Errorf("error unescaping payload: %v", err)
+		level.Error(wd.logger).Log("error", e)
+		return nil, e
 	}
 
 	b = strings.TrimLeft(b, "payload=")
 	if err := json.Unmarshal([]byte(b), &s); err != nil {
-		fmt.Print(err)
-		return nil, fmt.Errorf("error unmarshaling action request: %v", err)
+		e := fmt.Errorf("error unmarshaling action request: %v", err)
+		level.Error(wd.logger).Log("error", e)
+		return nil, e
 	}
 
 	return s, nil
 }
 
-func (dm *WarezDaemon) decodeSlackEvent(ctx context.Context, r *http.Request) (interface{}, error) {
+func (wd *WarezDaemon) decodeSlackEvent(ctx context.Context, r *http.Request) (interface{}, error) {
 	var s warez.SlackEvent
-
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
-		fmt.Print(err)
-		return nil, fmt.Errorf("error reading request body: %v", err)
+		e := fmt.Errorf("error reading request body: %v", err)
+		level.Error(wd.logger).Log("error", e)
+		return nil, e
 	}
+	level.Debug(wd.logger).Log("endpoint", "decodeSlackEvent", "body", string(body))
 
 	if err := json.Unmarshal(body, &s); err != nil {
-		fmt.Print(err)
-		return nil, fmt.Errorf("error unmarshaling request: %v", err)
+		e := fmt.Errorf("error unmarshaling request: %v", err)
+		level.Error(wd.logger).Log("error", e)
+		return nil, e
 	}
 
 	return s, nil
 }
 
-func (dm *WarezDaemon) encodeWarezNilResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+func (wd *WarezDaemon) decodeEmbyEvent(ctx context.Context, r *http.Request) (interface{}, error) {
+	var e warez.EmbyEvent
+	mediaType, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil {
+		e := fmt.Errorf("not a valid emby event: %v", err)
+		level.Error(wd.logger).Log("error", e)
+		return nil, e
+	}
+
+	if strings.HasPrefix(mediaType, "multipart/") {
+		mr := multipart.NewReader(r.Body, params["boundary"])
+		for {
+			p, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				level.Error(wd.logger).Log("error", err)
+				return nil, err
+			}
+			data, err := ioutil.ReadAll(p)
+			if err != nil {
+				level.Error(wd.logger).Log("error", err)
+				return nil, err
+			}
+
+			//s, err := strconv.Unquote(string(data))
+			//if err != nil {
+			//	level.Error(wd.logger).Log("error", err)
+			//	return nil, err
+			//}
+			level.Debug(wd.logger).Log("endpoint", "decodeEmbyEvent", "body", string(data))
+
+			err = json.Unmarshal(data, &e)
+			if err != nil {
+				level.Error(wd.logger).Log("error", err)
+				return nil, err
+			}
+		}
+	}
+
+	return e, nil
+}
+
+func (wd *WarezDaemon) encodeWarezNilResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	resp, ok := response.(warez.Response)
 	if !ok {
 		return errors.New("endpoint response error")
@@ -149,9 +214,9 @@ func (dm *WarezDaemon) encodeWarezNilResponse(ctx context.Context, w http.Respon
 	return nil
 }
 
-func (dm *WarezDaemon) encodeWarezResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
+func (wd *WarezDaemon) encodeWarezResponse(ctx context.Context, w http.ResponseWriter, response interface{}) error {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
+	//w.WriteHeader(http.StatusOK)
 	resp, ok := response.(warez.Response)
 	if !ok {
 		return errors.New("endpoint response error")
@@ -174,6 +239,17 @@ func slackProcessActionEndpoint(searchFunc warez.SlackActionFunc) endpoint.Endpo
 func slackProcessEndpoint(searchFunc warez.SlackEventFunc) endpoint.Endpoint {
 	return func(ctx context.Context, request interface{}) (interface{}, error) {
 		req, ok := request.(warez.SlackEvent)
+		if !ok {
+			return nil, fmt.Errorf("unknown request data")
+		}
+
+		return searchFunc(ctx, req)
+	}
+}
+
+func embyProcessEndpoint(searchFunc warez.EmbyEventFunc) endpoint.Endpoint {
+	return func(ctx context.Context, request interface{}) (interface{}, error) {
+		req, ok := request.(warez.EmbyEvent)
 		if !ok {
 			return nil, fmt.Errorf("unknown request data")
 		}
